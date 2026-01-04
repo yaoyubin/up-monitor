@@ -3,7 +3,7 @@ import aiohttp
 import time
 import os
 import json
-import re
+import datetime
 from bilibili_api import user
 
 # ================= 配置区域 =================
@@ -35,16 +35,13 @@ TARGET_UIDS = [
     385085361,
 ]
 
-# 第一层：硬过滤关键词
 KEYWORDS = ["ComfyUI", "Stable Diffusion", "Flux", "Sora", "Runway", "Luma", "AIGC", "LoRA", "工作流", "模型"]
-# 记录保存天数 (7天前的记录会被自动清理)
-HISTORY_DAYS = 7 
-# 并发限制 (同时查 3 个，保持礼貌)
+HISTORY_DAYS = 14 # 记忆保留时间稍微拉长一点，防止周报重复
 CONCURRENCY_LIMIT = 3
 # ===========================================
 
 class HistoryManager:
-    """管理已处理的视频记录 (你的短期记忆)"""
+    """记忆管理 (保持不变)"""
     def __init__(self, file_path="history.json"):
         self.file_path = file_path
         self.data = self._load()
@@ -59,47 +56,74 @@ class HistoryManager:
             return {}
 
     def is_processed(self, bvid):
-        """判断是否已处理过"""
         return bvid in self.data
 
     def add(self, bvid):
-        """添加新记录"""
         self.data[bvid] = int(time.time())
 
     def save_and_clean(self):
-        """清理过期记录并保存到文件"""
         now = time.time()
         expire_time = now - (HISTORY_DAYS * 24 * 3600)
-        # 字典推导式：只保留没过期的
         new_data = {k: v for k, v in self.data.items() if v > expire_time}
-        
         with open(self.file_path, 'w', encoding='utf-8') as f:
             json.dump(new_data, f, indent=2)
         print(f"记忆库更新：清理后剩余 {len(new_data)} 条记录")
 
-# 全局记忆管理器
 memory = HistoryManager()
 
+def get_time_config():
+    """【新功能】根据今天是星期几，决定抓取策略"""
+    # 获取当前北京时间 (UTC+8)
+    utc_now = datetime.datetime.utcnow()
+    beijing_now = utc_now + datetime.timedelta(hours=8)
+    weekday = beijing_now.weekday() # 0是周一, ..., 6是周日
+    
+    current_timestamp = time.time()
+    
+    if weekday == 0: # 如果是周一
+        print("今天是周一，执行【周报】模式，抓取过去 7 天...")
+        return {
+            "title": "B站 AIGC 周报 (Past 7 Days)",
+            "window": 7 * 24 * 3600,
+            "now": current_timestamp
+        }
+    else: # 周二到周五
+        print("今天是工作日，执行【日报】模式，抓取过去 1 天...")
+        return {
+            "title": "B站 AIGC 日报",
+            "window": 26 * 3600, # 设置26小时，稍微多一点防止漏掉边界
+            "now": current_timestamp
+        }
+
 async def fetch_videos_from_up(uid, semaphore):
-    """【数据源层】获取单个 UP 主的最新视频"""
-    async with semaphore: # 限制并发数
+    async with semaphore:
         try:
-            print(f"正在检查 UP: {uid} ...")
+            # print(f"正在检查 UID: {uid} ...") 
+            # 注释掉上一行，减少日志刷屏
             u = user.User(uid=uid)
-            videos = await u.get_videos(ps=5) # 只看最近5个
-            await asyncio.sleep(1) # 礼貌性延迟
+            # 周报模式下，5条可能不够，改为获取最近 10 条
+            videos = await u.get_videos(ps=10) 
+            await asyncio.sleep(0.5) 
             return videos.get('list', {}).get('vlist', [])
         except Exception as e:
             print(f"UID {uid} 获取失败: {e}")
             return []
 
-async def filter_content(video_data):
-    """【过滤层】两段式判断"""
+async def filter_content(video_data, time_config):
+    """【过滤层】增加了严格的时间判断"""
     title = video_data['title']
-    desc = video_data['description']
+    # 修复简介可能为空的bug
+    desc = video_data['description'] if 'description' in video_data else ""
     full_text = (title + desc).lower()
+    
+    # 1. 【新增】严格的时间过滤
+    # created 是视频发布时间戳
+    video_time = video_data['created']
+    # 如果 (当前时间 - 视频时间) > 允许的时间窗口，则说明是旧视频
+    if (time_config['now'] - video_time) > time_config['window']:
+        return False
 
-    # --- 第一段：关键词硬过滤 ---
+    # 2. 关键词硬过滤
     hit_keyword = False
     for kw in KEYWORDS:
         if kw.lower() in full_text:
@@ -107,81 +131,78 @@ async def filter_content(video_data):
             break
     
     if not hit_keyword:
-        return False # 关键词都没中，直接淘汰
+        return False
 
-    # --- 第二段：语义判断 (目前预留位置，暂时直接通过) ---
-    # 未来在这里接入 LLM API：
-    # if not await llm_check(title, desc): return False
-    
     return True
 
-async def send_notification(content):
-    """【通知层】发送飞书消息"""
+async def send_notification(content, title_prefix):
+    """发送飞书消息"""
     webhook_url = os.environ.get("FEISHU_WEBHOOK")
-    if not webhook_url:
-        print("未配置 FEISHU_WEBHOOK，跳过推送")
-        return
+    if not webhook_url: return
     
-    # 飞书富文本消息格式
-    # 注意：你的飞书机器人安全设置里必须包含 "AIGC" 这个关键词，否则发不出去
-    # 转换HTML格式为纯文本格式
-    text_content = content.replace("<h3>", "").replace("</h3>", "\n").replace("<ul>", "").replace("</ul>", "").replace("<li style='margin-bottom:8px'>", "- ").replace("<li>", "- ").replace("</li>", "\n").replace("<b>", "**").replace("</b>", "**")
-    # 处理链接格式：<a href='URL'>标题</a> -> 标题(URL)
-    text_content = re.sub(r"<a href='([^']+)'>([^<]+)</a>", r"\2(\1)", text_content)
-    
+    # 简单的 Markdown 格式化
+    text_content = f"**{title_prefix}**\n\n" + content \
+        .replace("<h3>", "").replace("</h3>", "\n") \
+        .replace("<ul>", "").replace("</ul>", "") \
+        .replace("<li style='margin-bottom:8px'>", "- ") \
+        .replace("<li>", "- ") \
+        .replace("</li>", "\n") \
+        .replace("<b>", "**").replace("</b>", "**") \
+        .replace("<a href='", "[").replace("'>", "](") \
+        .replace("</a>", ")")
+
     data = {
-        "msg_type": "text",
+        "msg_type": "markdown", # 改用 markdown 格式更美观
         "content": {
-            "text": "【B站 AIGC 监控日报】\n" + text_content
+            "text": text_content
         }
     }
     
     async with aiohttp.ClientSession() as session:
         async with session.post(webhook_url, json=data) as resp:
             print(f"推送状态: {resp.status}")
-            # 如果是钉钉，代码逻辑几乎一样，只是 json 结构微调
 
 async def main():
-    # 1. 初始化并发限制器
-    semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+    # 1. 获取今日策略 (周报 vs 日报)
+    config = get_time_config()
     
-    # 2. 并发获取所有 UP 主的数据
+    semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
     tasks = [fetch_videos_from_up(uid, semaphore) for uid in TARGET_UIDS]
     results = await asyncio.gather(*tasks)
     
-    # 3. 扁平化结果并去重处理
     valid_videos = []
     
     for video_list in results:
         for v in video_list:
             bvid = v['bvid']
             
-            # 【重要】如果记忆里有，直接跳过
+            # 记忆去重
             if memory.is_processed(bvid):
                 continue
             
-            # 进入过滤器
-            if await filter_content(v):
+            # 传入 config 进行时间判断
+            if await filter_content(v, config):
                 print(f"发现新视频：{v['title']}")
                 valid_videos.append(v)
-                # 标记为已处理 (但还没存盘，防止推送失败)
                 memory.add(bvid)
 
-    # 4. 发送通知
     if valid_videos:
-        msg = "<h3>今日 AIGC 新发现：</h3><ul>"
+        # 按发布时间倒序排列 (新的在前)
+        valid_videos.sort(key=lambda x: x['created'], reverse=True)
+        
+        msg = "<ul>"
         for v in valid_videos:
-            msg += f"<li style='margin-bottom:8px'><b>{v['author']}</b>: <a href='https://www.bilibili.com/video/{v['bvid']}'>{v['title']}</a></li>"
+            # 格式化一下时间，比如 [01-05]
+            time_str = time.strftime("%m-%d", time.localtime(v['created']))
+            msg += f"<li style='margin-bottom:8px'>[{time_str}] <b>{v['author']}</b>: <a href='https://www.bilibili.com/video/{v['bvid']}'>{v['title']}</a></li>"
         msg += "</ul>"
         
-        await send_notification(msg)
-        print("推送成功！")
+        await send_notification(msg, config['title'])
+        print(f"推送成功！共 {len(valid_videos)} 条")
     else:
         print("没有符合条件的新视频。")
 
-    # 5. 【关键】最后一步：保存记忆到文件
     memory.save_and_clean()
 
 if __name__ == '__main__':
     asyncio.run(main())
-
