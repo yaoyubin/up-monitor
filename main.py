@@ -161,7 +161,7 @@ async def send_notification(content, title_prefix):
     text_content = f"B站 AIGC\n\n**{title_prefix}**\n\n" + formatted_content
 
     data = {
-        "msg_type": "markdown", # 改用 markdown 格式更美观
+        "msg_type": "text", # 改用 text 格式更美观
         "content": {
             "text": text_content
         }
