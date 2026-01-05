@@ -153,12 +153,11 @@ async def send_notification(content, title_prefix):
         .replace("<a href='", "[").replace("'>", "](") \
         .replace("</a>", ")")
     
-    # 确保消息包含 AIGC 关键词（飞书机器人安全设置要求）
-    # 如果内容中不包含 AIGC，在标题中添加
-    if "AIGC" not in formatted_content.upper() and "AIGC" not in title_prefix.upper():
-        title_prefix = f"{title_prefix} (AIGC)"
-    
-    text_content = f"**{title_prefix}**\n\n" + formatted_content
+    # 确保消息包含飞书机器人要求的关键词（安全设置要求）
+    # 飞书机器人关键词：ComfyUI, Stable Diffusion, Flux, Sora, Runway, B站, AIGC, LoRA, 工作流, 模型
+    # 在消息开头明确添加关键词，确保飞书机器人能识别
+    # 使用 "B站" 和 "AIGC" 作为前缀，因为这两个词最通用
+    text_content = f"**{title_prefix}**\n\nB站 AIGC 相关内容：\n\n" + formatted_content
 
     data = {
         "msg_type": "markdown", # 改用 markdown 格式更美观
@@ -196,6 +195,10 @@ async def send_notification(content, title_prefix):
                 else:
                     print(f"❌ 推送失败 (HTTP {http_status}, code={code}): {msg}")
                     print(f"   响应体: {json.dumps(response_data, ensure_ascii=False)}")
+                    # 如果是关键词错误，打印消息内容的前200个字符用于调试
+                    if code == 19024:
+                        print(f"   消息内容预览: {text_content[:200]}...")
+                        print(f"   ⚠️  提示：飞书机器人要求消息包含特定关键词，请检查机器人安全设置")
                     return False
                     
     except asyncio.TimeoutError:
