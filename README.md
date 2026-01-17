@@ -8,23 +8,38 @@
 - 🎯 **智能过滤**：关键词硬过滤 + 预留LLM语义判断
 - 💾 **持久化记忆**：使用 `history.json` 记录已处理视频，避免重复推送
 - 🧹 **自动清理**：7天前的记录自动过期删除
-- 📱 **推送通知**：通过飞书机器人发送消息
+- 📧 **推送通知**：通过Gmail邮件发送通知
 - 🤖 **自动化运行**：GitHub Actions 每天自动运行
 
 ## 快速开始
 
 ### 1. 配置 GitHub Secrets
 
-在 GitHub 仓库中配置飞书机器人 Webhook：
+在 GitHub 仓库中配置 Gmail 邮件通知：
+
+#### 步骤 1.1：获取 Gmail 应用专用密码
+
+1. 登录你的 Gmail 账户
+2. 进入 [Google 账户安全设置](https://myaccount.google.com/security)
+3. 确保已启用 **两步验证**（必须）
+4. 在安全设置中，找到 **应用专用密码** 或 **App passwords**
+5. 选择 **邮件** 和设备类型（如：其他（自定义名称））
+6. 输入名称（如：`B站监控`），点击 **生成**
+7. **复制生成的16位密码**（只显示一次，请妥善保存）
+
+#### 步骤 1.2：配置 GitHub Secrets
 
 1. 进入你的 GitHub 仓库
 2. 点击 **Settings** → **Secrets and variables** → **Actions**
-3. 点击 **New repository secret**
-4. 名称填写：`FEISHU_WEBHOOK`
-5. 值填写：你的飞书机器人 Webhook URL（格式：`https://open.feishu.cn/open-apis/bot/v2/hook/...`）
-6. 点击 **Add secret**
+3. 点击 **New repository secret**，依次添加以下三个 secrets：
 
-**重要提示**：飞书机器人的安全设置中必须包含 "AIGC" 这个关键词，否则消息无法发送。
+   - **`GMAIL_SENDER`**：你的 Gmail 邮箱地址（如：`yourname@gmail.com`）
+   - **`GMAIL_APP_PASSWORD`**：刚才生成的16位应用专用密码
+   - **`GMAIL_RECIPIENT`**：接收通知的邮箱地址（可以是同一邮箱或不同邮箱）
+
+**重要提示**：
+- 必须使用**应用专用密码**，不能使用普通密码
+- 如果未启用两步验证，无法生成应用专用密码
 
 ### 2. 配置监控的UP主
 
@@ -58,10 +73,20 @@ KEYWORDS = ["ComfyUI", "Stable Diffusion", "Flux", "Sora", "Runway", "Luma", "AI
 # 安装依赖
 pip install -r requirements.txt
 
-# 设置环境变量
-export FEISHU_WEBHOOK=https://open.feishu.cn/open-apis/bot/v2/hook/...  # Linux/Mac
-# 或
-set FEISHU_WEBHOOK=https://open.feishu.cn/open-apis/bot/v2/hook/...  # Windows
+# 设置环境变量（Linux/Mac）
+export GMAIL_SENDER="yourname@gmail.com"
+export GMAIL_APP_PASSWORD="your_16_digit_app_password"
+export GMAIL_RECIPIENT="recipient@example.com"
+
+# 设置环境变量（Windows PowerShell）
+$env:GMAIL_SENDER="yourname@gmail.com"
+$env:GMAIL_APP_PASSWORD="your_16_digit_app_password"
+$env:GMAIL_RECIPIENT="recipient@example.com"
+
+# 设置环境变量（Windows CMD）
+set GMAIL_SENDER=yourname@gmail.com
+set GMAIL_APP_PASSWORD=your_16_digit_app_password
+set GMAIL_RECIPIENT=recipient@example.com
 
 # 运行脚本
 python main.py

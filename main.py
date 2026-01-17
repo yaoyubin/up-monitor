@@ -4,6 +4,9 @@ import time
 import os
 import json
 import datetime
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from bilibili_api import user
 from up_list import TARGET_UIDS, UP_LIST
 
@@ -138,77 +141,62 @@ async def filter_content(video_data, time_config):
     return True
 
 async def send_notification(content, title_prefix):
-    """发送飞书消息（修复版本：检查响应体中的 code 字段）"""
-    webhook_url = os.environ.get("FEISHU_WEBHOOK")
-    if not webhook_url:
-        print("❌ FEISHU_WEBHOOK 未设置")
+    """使用Gmail SMTP发送邮件通知"""
+    sender_email = os.environ.get("GMAIL_SENDER")
+    app_password = os.environ.get("GMAIL_APP_PASSWORD")
+    recipient_email = os.environ.get("GMAIL_RECIPIENT")
+    
+    if not sender_email or not app_password or not recipient_email:
+        print("❌ Gmail配置未设置（需要：GMAIL_SENDER, GMAIL_APP_PASSWORD, GMAIL_RECIPIENT）")
         return False
     
-    # 格式化内容（text 格式，不使用 Markdown）
-    formatted_content = content \
-        .replace("<h3>", "").replace("</h3>", "\n") \
-        .replace("<ul>", "").replace("</ul>", "") \
-        .replace("<li style='margin-bottom:8px'>", "- ") \
-        .replace("<li>", "- ") \
-        .replace("</li>", "\n") \
-        .replace("<b>", "").replace("</b>", "") \
-        .replace("<a href='", "").replace("'>", ": ") \
-        .replace("</a>", "")
+    # 构建HTML格式的邮件内容
+    html_content = f"""
+    <html>
+    <head>
+        <meta charset="utf-8">
+    </head>
+    <body>
+        <h3>{title_prefix}</h3>
+        {content}
+    </body>
+    </html>
+    """
     
-    # 确保消息包含飞书机器人要求的关键词（安全设置要求）
-    # 飞书机器人关键词：ComfyUI, Stable Diffusion, Flux, Sora, Runway, B站, AIGC, LoRA, 工作流, 模型
-    # 在消息开头明确添加关键词，确保飞书机器人能识别
-    # 注意：使用 text 格式而不是 markdown，因为 markdown 格式中关键词可能无法被识别
-    # 测试发现：text 格式能正确识别关键词，markdown 格式会返回 code=19024
-    text_content = f"B站 AIGC\n\n{title_prefix}\n\n" + formatted_content
-
-    data = {
-        "msg_type": "text", # 使用 text 格式确保关键词能被识别
-        "content": {
-            "text": text_content
-        }
-    }
+    # 创建邮件消息
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = title_prefix
+    msg['From'] = sender_email
+    msg['To'] = recipient_email
+    
+    # 添加HTML内容
+    html_part = MIMEText(html_content, 'html', 'utf-8')
+    msg.attach(html_part)
+    
+    # 使用asyncio.to_thread包装同步SMTP调用
+    def send_email_sync():
+        """同步发送邮件函数"""
+        try:
+            with smtplib.SMTP('smtp.gmail.com', 587) as server:
+                server.starttls()
+                server.login(sender_email, app_password)
+                server.send_message(msg)
+            return True, None
+        except Exception as e:
+            return False, str(e)
     
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                webhook_url,
-                json=data,
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as resp:
-                # 1. 检查 HTTP 状态码
-                http_status = resp.status
-                
-                # 2. 读取响应体（关键！）
-                try:
-                    response_data = await resp.json()
-                except:
-                    response_text = await resp.text()
-                    print(f"❌ 响应不是有效的JSON (HTTP {http_status}): {response_text}")
-                    return False
-                
-                # 3. 检查飞书 API 的实际状态码
-                # code = 0 表示成功，code != 0 表示失败
-                code = response_data.get("code", -1)
-                msg = response_data.get("msg", "")
-                
-                if code == 0:
-                    print(f"✅ 推送成功 (HTTP {http_status}, code {code})")
-                    return True
-                else:
-                    print(f"❌ 推送失败 (HTTP {http_status}, code={code}): {msg}")
-                    print(f"   响应体: {json.dumps(response_data, ensure_ascii=False)}")
-                    # 如果是关键词错误，打印消息内容的前200个字符用于调试
-                    if code == 19024:
-                        print(f"   消息内容预览: {text_content[:200]}...")
-                        print(f"   ⚠️  提示：飞书机器人要求消息包含特定关键词，请检查机器人安全设置")
-                    return False
-                    
-    except asyncio.TimeoutError:
-        print(f"❌ 推送超时")
-        return False
+        success, error_msg = await asyncio.to_thread(send_email_sync)
+        if success:
+            print(f"✅ 邮件发送成功")
+            return True
+        else:
+            print(f"❌ 邮件发送失败: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return False
     except Exception as e:
-        print(f"❌ 推送异常: {str(e)}")
+        print(f"❌ 邮件发送异常: {str(e)}")
         import traceback
         traceback.print_exc()
         return False
