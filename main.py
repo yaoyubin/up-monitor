@@ -8,11 +8,10 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from bilibili_api import user
-from up_list import TARGET_UIDS, UP_LIST
+from up_list import TARGET_UIDS, UP_LIST, KEYWORDS, NO_FILTER_UIDS
 
 # ================= 配置区域 =================
 
-KEYWORDS = ["ComfyUI", "Stable Diffusion", "Flux", "Sora", "Runway", "Luma", "AIGC", "LoRA", "工作流", "模型"]
 HISTORY_DAYS = 14 # 记忆保留时间稍微拉长一点，防止周报重复
 CONCURRENCY_LIMIT = 2  # 降低并发数，避免触发风控
 # ===========================================
@@ -114,13 +113,8 @@ async def fetch_videos_from_up(uid, semaphore, retry_count=3):
         print(f"❌ UID {uid} 获取失败，已重试 {retry_count} 次")
         return []
 
-async def filter_content(video_data, time_config):
-    """【过滤层】增加了严格的时间判断"""
-    title = video_data['title']
-    # 修复简介可能为空的bug
-    desc = video_data['description'] if 'description' in video_data else ""
-    full_text = (title + desc).lower()
-    
+async def filter_content(video_data, time_config, up_uid=None):
+    """【过滤层】增加了严格的时间判断和特殊UP主支持"""
     # 1. 【新增】严格的时间过滤
     # created 是视频发布时间戳
     video_time = video_data['created']
@@ -128,7 +122,16 @@ async def filter_content(video_data, time_config):
     if (time_config['now'] - video_time) > time_config['window']:
         return False
 
-    # 2. 关键词硬过滤
+    # 2. 特殊UP主检查：如果在NO_FILTER_UIDS列表中，跳过关键词过滤
+    if up_uid and up_uid in NO_FILTER_UIDS:
+        return True
+
+    # 3. 关键词硬过滤（仅对普通UP主）
+    title = video_data['title']
+    # 修复简介可能为空的bug
+    desc = video_data['description'] if 'description' in video_data else ""
+    full_text = (title + desc).lower()
+    
     hit_keyword = False
     for kw in KEYWORDS:
         if kw.lower() in full_text:
@@ -228,6 +231,7 @@ async def main():
             continue
         
         success_count += 1
+        current_uid = TARGET_UIDS[i]  # 当前UP主的UID
         for v in result:
             bvid = v['bvid']
             
@@ -235,8 +239,8 @@ async def main():
             if memory.is_processed(bvid):
                 continue
             
-            # 传入 config 进行时间判断
-            if await filter_content(v, config):
+            # 传入 config 和 UID 进行过滤判断
+            if await filter_content(v, config, up_uid=current_uid):
                 print(f"发现新视频：{v['title']}")
                 valid_videos.append(v)
                 memory.add(bvid)

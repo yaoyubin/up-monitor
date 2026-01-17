@@ -121,8 +121,9 @@ python main.py
 
 ## 未来扩展
 
+- [ ] 支持youtube up主
+- [ ] 支持监控forum中的每天的新post
 - [ ] 接入LLM API实现语义判断
-- [ ] 支持更多推送渠道
 - [ ] 添加视频分类功能
 
 ## License
