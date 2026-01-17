@@ -63,22 +63,22 @@ memory = HistoryManager()
 
 def get_time_config():
     """【新功能】根据今天是星期几，决定抓取策略"""
-    # 获取当前北京时间 (UTC+8)
+    # 获取当前美国西部时间 (PST, UTC-8)
     utc_now = datetime.datetime.utcnow()
-    beijing_now = utc_now + datetime.timedelta(hours=8)
-    weekday = beijing_now.weekday() # 0是周一, ..., 6是周日
+    pst_now = utc_now - datetime.timedelta(hours=8)
+    weekday = pst_now.weekday() # 0是周一, ..., 6是周日
     
     current_timestamp = time.time()
     
-    if weekday == 0: # 如果是周一
-        print("今天是周一，执行【周报】模式，抓取过去 7 天...")
+    if weekday == 5: # 如果是周六
+        print("今天是周六（美国西部时间），执行【周报】模式，抓取过去 7 天...")
         return {
             "title": "UGC监控周报 (Past 7 Days)",
             "window": 7 * 24 * 3600,
             "now": current_timestamp
         }
-    else: # 周二到周五
-        print("今天是工作日，执行【日报】模式，抓取过去 1 天...")
+    else: # 其他6天（周日到周五）都是日报模式
+        print("今天执行【日报】模式，抓取过去 1 天...")
         return {
             "title": "UGC监控日报",
             "window": 26 * 3600, # 设置26小时，稍微多一点防止漏掉边界
