@@ -7,9 +7,13 @@ import datetime
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from dotenv import load_dotenv
 from bilibili_api import user
 from googleapiclient.discovery import build
 from up_list import TARGET_UIDS, UP_LIST, KEYWORDS, NO_FILTER_UIDS, UP_NAME_MAP, YOUTUBE_CHANNELS, YOUTUBE_NO_FILTER_CHANNELS
+
+# 加载 .env 文件中的环境变量
+load_dotenv()
 
 # ================= 配置区域 =================
 

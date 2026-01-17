@@ -1,8 +1,12 @@
 import asyncio
 import os
+from dotenv import load_dotenv
 from bilibili_api import user
 from up_list import TARGET_UIDS, NO_FILTER_UIDS, YOUTUBE_CHANNELS, YOUTUBE_NO_FILTER_CHANNELS
 from googleapiclient.discovery import build
+
+# 加载 .env 文件中的环境变量
+load_dotenv()
 
 async def get_user_info(uid, semaphore):
     """获取用户信息"""

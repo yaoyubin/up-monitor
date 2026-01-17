@@ -115,6 +115,37 @@ KEYWORDS = [
 
 #### 方式二：本地运行
 
+**推荐方式：使用 .env 文件（最简单）**
+
+1. 复制 `.env.example` 为 `.env`：
+   ```bash
+   # Linux/Mac
+   cp .env.example .env
+   
+   # Windows PowerShell
+   copy .env.example .env
+   
+   # Windows CMD
+   copy .env.example .env
+   ```
+
+2. 编辑 `.env` 文件，填入你的实际配置值：
+   ```env
+   GMAIL_SENDER=yourname@gmail.com
+   GMAIL_APP_PASSWORD=your_16_digit_app_password
+   GMAIL_RECIPIENT=recipient@example.com
+   YOUTUBE_API_KEY=your_youtube_api_key  # 可选，仅在监控YouTube时需要
+   ```
+
+3. 运行脚本：
+   ```bash
+   python main.py
+   ```
+
+**备选方式：使用命令行设置环境变量**
+
+如果不想使用 .env 文件，也可以通过命令行设置环境变量：
+
 ```bash
 # 安装依赖
 pip install -r requirements.txt
@@ -140,6 +171,8 @@ set YOUTUBE_API_KEY=your_youtube_api_key  # 可选，仅在监控YouTube时需�
 # 运行脚本
 python main.py
 ```
+
+**注意**：环境变量的优先级为：系统环境变量 > .env 文件。如果系统环境变量已设置，会优先使用系统环境变量。
 
 #### 方式三：本地测试（推荐用于开发调试）
 
