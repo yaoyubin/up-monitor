@@ -117,19 +117,6 @@ UP_LIST = {
         
         file_content += '''}
 
-# 提取所有UID列表（用于main.py）
-TARGET_UIDS = list(UP_LIST.keys())
-
-# 关键词过滤列表（用于视频内容过滤）
-KEYWORDS = [
-'''
-        # 写入 KEYWORDS
-        for kw in keywords_list:
-            kw_escaped = kw.replace('"', '\\"').replace("'", "\\'")
-            file_content += f'    "{kw_escaped}",\n'
-        
-        file_content += ''']
-
 # 特殊UP主列表（这些UP主的视频不进行关键词过滤，直接推送）
 # 如果某个UP主的所有视频都值得关注，可以将其UID添加到此列表中
 NO_FILTER_UIDS = [
@@ -160,6 +147,38 @@ NO_FILTER_UIDS = [
                 else:
                     # 如果没有找到名字，只写 UID（可能不在监控列表中或查询失败）
                     file_content += f'    {uid},\n'
+        
+        file_content += '''] 
+
+# UP主名字映射（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
+# 用于显示UP主名字，即使UP主不在UP_LIST中
+# 此映射会自动从UP_LIST和查询结果中生成
+UP_NAME_MAP = {
+    **UP_LIST,  # 从UP_LIST中获取名字
+'''
+        # 生成 UP_NAME_MAP，包含所有查询到的 UP 主名字
+        # 包括 UP_LIST 中的和 NO_FILTER_UIDS 中查询到的
+        target_uids_written_set = set(target_uids_to_write)
+        for uid in sorted(no_filter_list):
+            # 只添加 NO_FILTER_UIDS 中不在 UP_LIST 中的 UID（避免重复）
+            if uid not in target_uids_written_set and uid in up_list_dict and up_list_dict[uid] != "查询失败":
+                name = up_list_dict[uid]
+                name_escaped = name.replace('"', '\\"').replace("'", "\\'")
+                file_content += f'    {uid}: "{name_escaped}",  # NO_FILTER_UIDS中的UP主\n'
+        
+        file_content += '''}
+
+# 提取所有UID列表（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
+# 使用set去重，确保不重复监控
+TARGET_UIDS = list(set(list(UP_LIST.keys()) + NO_FILTER_UIDS))
+
+# 关键词过滤列表（用于视频内容过滤）
+KEYWORDS = [
+'''
+        # 写入 KEYWORDS
+        for kw in keywords_list:
+            kw_escaped = kw.replace('"', '\\"').replace("'", "\\'")
+            file_content += f'    "{kw_escaped}",\n'
         
         file_content += ']'
         
