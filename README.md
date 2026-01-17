@@ -226,6 +226,7 @@ python test_local.py
 
 - [x] 支持YouTube频道监控
 - [ ] 支持监控forum中的每天的新post
+- [ ] 利用gemini总结youtube视频
 - [ ] 接入LLM API实现语义判断
 - [ ] 添加视频分类功能
 
