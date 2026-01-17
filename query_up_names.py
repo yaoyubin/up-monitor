@@ -256,6 +256,10 @@ NO_FILTER_UIDS = [
         
         file_content += '''] 
 
+# 提取所有UID列表（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
+# 使用set去重，确保不重复监控
+TARGET_UIDS = list(set(list(UP_LIST.keys()) + NO_FILTER_UIDS))
+
 # YouTube频道列表：{Channel ID: 频道名字}
 # Channel ID 格式：UCxxxxx（24个字符）
 YOUTUBE_CHANNELS = {
