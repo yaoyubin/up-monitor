@@ -24,13 +24,14 @@ jobs:
           python-version: '3.9'
 
       - name: 安装依赖
-        run: pip install bilibili-api-python aiohttp
+        run: pip install bilibili-api-python aiohttp google-api-python-client
 
       - name: 运行监控脚本
         env:
           GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           GMAIL_RECIPIENT: ${{ secrets.GMAIL_RECIPIENT }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python main.py
 
       # 【新增】记忆保存步骤

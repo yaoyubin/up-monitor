@@ -1,14 +1,14 @@
-# B站UP主视频监控系统
+# B站UP主和YouTube频道视频监控系统
 
-自动监控B站UP主的新视频，检测AIGC相关内容并推送通知。
+自动监控B站UP主和YouTube频道的新视频，检测AIGC相关内容并推送通知。
 
 ## 功能特性
 
-- 🔍 **并发监控**：同时监控多个UP主，智能控制并发数
+- 🔍 **并发监控**：同时监控多个B站UP主和YouTube频道，智能控制并发数
 - 🎯 **智能过滤**：关键词硬过滤 + 预留LLM语义判断
 - 💾 **持久化记忆**：使用 `history.json` 记录已处理视频，避免重复推送
 - 🧹 **自动清理**：7天前的记录自动过期删除
-- 📧 **推送通知**：通过Gmail邮件发送通知
+- 📧 **推送通知**：通过Gmail邮件发送通知（合并B站和YouTube的更新到同一封邮件）
 - 🤖 **自动化运行**：GitHub Actions 每天自动运行
 
 ## 快速开始
@@ -36,28 +36,74 @@
    - **`GMAIL_SENDER`**：你的 Gmail 邮箱地址（如：`yourname@gmail.com`）
    - **`GMAIL_APP_PASSWORD`**：刚才生成的16位应用专用密码
    - **`GMAIL_RECIPIENT`**：接收通知的邮箱地址（可以是同一邮箱或不同邮箱）
+   - **`YOUTUBE_API_KEY`**（可选）：如果要监控YouTube频道，需要配置YouTube Data API v3密钥
 
 **重要提示**：
 - 必须使用**应用专用密码**，不能使用普通密码
 - 如果未启用两步验证，无法生成应用专用密码
+- 如需监控YouTube频道，请先获取YouTube Data API密钥（见下方说明）
 
-### 2. 配置监控的UP主
+#### YouTube API Key 获取方法（可选）
 
-编辑 `main.py` 文件，修改 `TARGET_UIDS` 列表：
+1. 访问 [Google Cloud Console](https://console.cloud.google.com/)
+2. 创建新项目或选择现有项目
+3. 启用 **YouTube Data API v3**
+4. 创建 **API密钥**（Credentials → Create Credentials → API Key）
+5. 复制API密钥，添加到 GitHub Secrets 的 `YOUTUBE_API_KEY`
+
+### 2. 配置监控的UP主和YouTube频道
+
+编辑 `up_list.py` 文件：
+
+#### 2.1 配置B站UP主
 
 ```python
-TARGET_UIDS = [
-    20259914,  # 秋叶
+# UP主列表：{UID: UP主名字}
+UP_LIST = {
+    4401694: "林亦LYi",
+    130636947: "塑料叉FOKU",
     # 添加更多UP主的UID...
+}
+
+# 特殊UP主列表（这些UP主的视频不进行关键词过滤，直接推送）
+NO_FILTER_UIDS = [
+    419743655,  # BiBiPiano
+    # 添加更多不需要关键词过滤的UP主UID...
 ]
 ```
 
-### 3. 配置关键词（可选）
-
-编辑 `main.py` 文件，修改 `KEYWORDS` 列表：
+#### 2.2 配置YouTube频道（可选）
 
 ```python
-KEYWORDS = ["ComfyUI", "Stable Diffusion", "Flux", "Sora", "Runway", "Luma", "AIGC", "LoRA"]
+# YouTube频道列表：{Channel ID: 频道名字}
+# Channel ID 格式：UCxxxxx（24个字符）
+YOUTUBE_CHANNELS = {
+    'UCxxxxx': "频道名字",
+    # 添加更多频道的Channel ID...
+}
+
+# YouTube特殊频道列表（这些频道的视频不进行关键词过滤，直接推送）
+YOUTUBE_NO_FILTER_CHANNELS = [
+    'UCxxxxx',  # 频道名字
+    # 添加更多不需要关键词过滤的频道ID...
+]
+```
+
+**如何获取YouTube Channel ID**：
+- 方法1：访问频道的 YouTube Studio，在"设置"→"高级设置"中查看Channel ID
+- 方法2：访问频道页面，查看URL或页面源代码中的Channel ID
+
+### 3. 配置关键词（可选）
+
+编辑 `up_list.py` 文件，修改 `KEYWORDS` 列表：
+
+```python
+KEYWORDS = [
+    "AIGC",
+    "工作流",
+    "模型",
+    # 添加更多关键词...
+]
 ```
 
 ### 4. 运行方式
@@ -77,16 +123,19 @@ pip install -r requirements.txt
 export GMAIL_SENDER="yourname@gmail.com"
 export GMAIL_APP_PASSWORD="your_16_digit_app_password"
 export GMAIL_RECIPIENT="recipient@example.com"
+export YOUTUBE_API_KEY="your_youtube_api_key"  # 可选，仅在监控YouTube时需要
 
 # 设置环境变量（Windows PowerShell）
 $env:GMAIL_SENDER="yourname@gmail.com"
 $env:GMAIL_APP_PASSWORD="your_16_digit_app_password"
 $env:GMAIL_RECIPIENT="recipient@example.com"
+$env:YOUTUBE_API_KEY="your_youtube_api_key"  # 可选，仅在监控YouTube时需要
 
 # 设置环境变量（Windows CMD）
 set GMAIL_SENDER=yourname@gmail.com
 set GMAIL_APP_PASSWORD=your_16_digit_app_password
 set GMAIL_RECIPIENT=recipient@example.com
+set YOUTUBE_API_KEY=your_youtube_api_key  # 可选，仅在监控YouTube时需要
 
 # 运行脚本
 python main.py
@@ -128,10 +177,10 @@ python test_local.py
 
 ## 工作原理
 
-1. **Memory (记忆层)**：`HistoryManager` 类管理 `history.json`，记录已处理的视频
-2. **Fetcher (数据源)**：并发获取UP主的最新视频列表
-3. **Filter (过滤器)**：关键词过滤 → (预留)LLM语义判断
-4. **Notifier (通知器)**：发送推送消息
+1. **Memory (记忆层)**：`HistoryManager` 类管理 `history.json`，记录已处理的视频（支持B站bvid和YouTube video_id）
+2. **Fetcher (数据源)**：并发获取B站UP主和YouTube频道的最新视频列表
+3. **Filter (过滤器)**：关键词过滤 → (预留)LLM语义判断，支持B站和YouTube两种平台
+4. **Notifier (通知器)**：发送合并的推送消息（B站和YouTube更新在同一封邮件中）
 
 ## 注意事项
 
@@ -142,7 +191,7 @@ python test_local.py
 
 ## 未来扩展
 
-- [ ] 支持youtube up主
+- [x] 支持YouTube频道监控
 - [ ] 支持监控forum中的每天的新post
 - [ ] 接入LLM API实现语义判断
 - [ ] 添加视频分类功能

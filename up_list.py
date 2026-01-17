@@ -1,6 +1,6 @@
 """
-B站UP主关注列表配置
-包含需要监控的UP主的UID和名字
+B站UP主和YouTube频道关注列表配置
+包含需要监控的UP主/频道的ID和名字
 """
 
 # UP主列表：{UID: UP主名字}
@@ -38,6 +38,31 @@ UP_NAME_MAP = {
 # 提取所有UID列表（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
 # 使用set去重，确保不重复监控
 TARGET_UIDS = list(set(list(UP_LIST.keys()) + NO_FILTER_UIDS))
+
+# YouTube频道列表：{Channel ID: 频道名字}
+# Channel ID 格式：UCxxxxx（24个字符）
+YOUTUBE_CHANNELS = {
+    # 示例：'UCxxxxx': "频道名字",
+    # 你可以在这里添加需要监控的YouTube频道
+    'UCVomjkM_t0EcctTWSE1Jvxg': "VomjkM",
+}
+
+# YouTube特殊频道列表（这些频道的视频不进行关键词过滤，直接推送）
+# 如果某个频道的所有视频都值得关注，可以将其Channel ID添加到此列表中
+YOUTUBE_NO_FILTER_CHANNELS = [
+    # 示例：'UCxxxxx',  # 频道名字
+    # 你可以在这里添加不需要关键词过滤的YouTube频道ID
+    'UCVomjkM_t0EcctTWSE1Jvxg', # VomjkM
+]
+
+# UP主名字映射（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
+# 用于显示UP主名字，即使UP主不在UP_LIST中
+# 此映射会自动从UP_LIST和查询结果中生成
+# 现在也包含YouTube频道名字
+UP_NAME_MAP = {
+    **UP_LIST,  # 从UP_LIST中获取名字
+    **YOUTUBE_CHANNELS,  # 从YOUTUBE_CHANNELS中获取名字
+}
 
 # 关键词过滤列表（用于视频内容过滤）
 KEYWORDS = [

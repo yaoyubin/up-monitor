@@ -21,6 +21,9 @@ google-generativeai
 # gRPC, for Google Generative AI preventing WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
 grpcio==1.70.0
 
-# B站监控系统
+# Bilibili API
 bilibili-api-python
 aiohttp
+
+# YouTube API
+google-api-python-client

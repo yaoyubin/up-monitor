@@ -1,6 +1,6 @@
 """
 本地测试脚本
-用于测试B站UP主视频监控系统，可以选择日报/周报模式，并且不发送真实邮件
+用于测试B站UP主和YouTube频道视频监控系统，可以选择日报/周报模式，并且不发送真实邮件
 """
 
 import asyncio
@@ -11,11 +11,12 @@ import sys
 # 导入main.py中的函数和配置
 from main import (
     fetch_videos_from_up,
+    fetch_youtube_videos,
     filter_content,
     CONCURRENCY_LIMIT,
     HistoryManager
 )
-from up_list import TARGET_UIDS, UP_NAME_MAP
+from up_list import TARGET_UIDS, UP_NAME_MAP, YOUTUBE_CHANNELS, YOUTUBE_NO_FILTER_CHANNELS
 
 # ================= 测试配置 =================
 
@@ -102,90 +103,158 @@ async def main():
     from up_list import UP_LIST, NO_FILTER_UIDS, KEYWORDS
     
     print(f"⏰ 时间窗口: {config['window'] / 3600:.1f} 小时")
-    print(f"📅 监控 {len(TARGET_UIDS)} 个UP主")
+    print(f"📅 监控 {len(TARGET_UIDS)} 个B站UP主")
+    if YOUTUBE_CHANNELS:
+        print(f"📺 监控 {len(YOUTUBE_CHANNELS)} 个YouTube频道")
     print(f"⚙️  并发限制: {CONCURRENCY_LIMIT}")
     
-    # 显示配置信息
-    print(f"\n📋 监控列表:")
+    # 显示配置信息 - B站UP主
+    print(f"\n📋 B站UP主列表:")
     for uid in TARGET_UIDS:
         # 使用UP_NAME_MAP获取UP主名字，支持NO_FILTER_UIDS中的UP主
         up_name = UP_NAME_MAP.get(uid, f"UID_{uid}")
         is_special = uid in NO_FILTER_UIDS
         status = "⭐ 特殊（不过滤关键词）" if is_special else f"🔍 关键词: {', '.join(KEYWORDS)}"
         print(f"   - {up_name} (UID: {uid}) - {status}")
+    
+    # 显示配置信息 - YouTube频道
+    if YOUTUBE_CHANNELS:
+        print(f"\n📺 YouTube频道列表:")
+        for channel_id in YOUTUBE_CHANNELS.keys():
+            channel_name = YOUTUBE_CHANNELS.get(channel_id, f"Channel_{channel_id}")
+            is_special = channel_id in YOUTUBE_NO_FILTER_CHANNELS
+            status = "⭐ 特殊（不过滤关键词）" if is_special else f"🔍 关键词: {', '.join(KEYWORDS)}"
+            print(f"   - {channel_name} (ID: {channel_id}) - {status}")
     print()
     
     # 2. 并发获取视频
     print("开始抓取视频...\n")
     semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
-    tasks = [fetch_videos_from_up(uid, semaphore) for uid in TARGET_UIDS]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
     
     valid_videos = []
     success_count = 0
     fail_count = 0
-    
-    # 3. 处理结果（添加详细调试信息）
-    
     total_videos = 0
     skipped_by_time = 0
     skipped_by_keyword = 0
     skipped_by_history = 0
     
-    for i, result in enumerate(results):
-        if isinstance(result, Exception):
-            fail_count += 1
-            print(f"❌ UID {TARGET_UIDS[i]} 获取异常: {result}")
-            continue
+    # 2.1 获取B站视频
+    if TARGET_UIDS:
+        bilibili_tasks = [fetch_videos_from_up(uid, semaphore) for uid in TARGET_UIDS]
+        bilibili_results = await asyncio.gather(*bilibili_tasks, return_exceptions=True)
         
-        if not result:
-            fail_count += 1
-            continue
-        
-        success_count += 1
-        current_uid = TARGET_UIDS[i]
-        # 使用UP_NAME_MAP获取UP主名字，支持NO_FILTER_UIDS中的UP主
-        up_name = UP_NAME_MAP.get(current_uid, f"UID_{current_uid}")
-        is_special = current_uid in NO_FILTER_UIDS
-        
-        print(f"\n📋 UP主: {up_name} (UID: {current_uid})")
-        if is_special:
-            print(f"   ⭐ 特殊UP主：跳过关键词过滤")
-        else:
-            print(f"   🔍 关键词过滤：{', '.join(KEYWORDS)}")
-        
-        print(f"   获取到 {len(result)} 个视频")
-        
-        for v in result:
-            bvid = v['bvid']
-            total_videos += 1
-            
-            # 记忆去重
-            if test_memory.is_processed(bvid):
-                skipped_by_history += 1
+        for i, result in enumerate(bilibili_results):
+            if isinstance(result, Exception):
+                fail_count += 1
+                print(f"❌ UID {TARGET_UIDS[i]} 获取异常: {result}")
                 continue
             
-            # 检查时间过滤
-            video_time = v['created']
-            time_diff = config['now'] - video_time
-            if time_diff > config['window']:
-                hours_ago = time_diff / 3600
-                skipped_by_time += 1
+            if not result:
+                fail_count += 1
                 continue
             
-            # 过滤判断
-            if await filter_content(v, config, up_uid=current_uid):
-                time_str = time.strftime("%m-%d %H:%M", time.localtime(video_time))
-                print(f"   ✅ 发现新视频 [{time_str}]: {v['title']}")
-                valid_videos.append(v)
-                test_memory.add(bvid)
+            success_count += 1
+            current_uid = TARGET_UIDS[i]
+            # 使用UP_NAME_MAP获取UP主名字，支持NO_FILTER_UIDS中的UP主
+            up_name = UP_NAME_MAP.get(current_uid, f"UID_{current_uid}")
+            is_special = current_uid in NO_FILTER_UIDS
+            
+            print(f"\n📋 B站UP主: {up_name} (UID: {current_uid})")
+            if is_special:
+                print(f"   ⭐ 特殊UP主：跳过关键词过滤")
             else:
-                # 如果不匹配，说明关键词过滤失败（特殊UP主不会走到这里）
-                skipped_by_keyword += 1
+                print(f"   🔍 关键词过滤：{', '.join(KEYWORDS)}")
+            
+            print(f"   获取到 {len(result)} 个视频")
+            
+            for v in result:
+                bvid = v['bvid']
+                total_videos += 1
+                
+                # 记忆去重
+                if test_memory.is_processed(bvid):
+                    skipped_by_history += 1
+                    continue
+                
+                # 检查时间过滤
+                video_time = v['created']
+                time_diff = config['now'] - video_time
+                if time_diff > config['window']:
+                    hours_ago = time_diff / 3600
+                    skipped_by_time += 1
+                    continue
+                
+                # 过滤判断
+                if await filter_content(v, config, up_uid=current_uid, platform='bilibili'):
+                    time_str = time.strftime("%m-%d %H:%M", time.localtime(video_time))
+                    print(f"   ✅ 发现新视频 [{time_str}]: {v['title']}")
+                    valid_videos.append(v)
+                    test_memory.add(bvid)
+                else:
+                    # 如果不匹配，说明关键词过滤失败（特殊UP主不会走到这里）
+                    skipped_by_keyword += 1
+    
+    # 2.2 获取YouTube视频
+    youtube_channel_ids = list(YOUTUBE_CHANNELS.keys()) if YOUTUBE_CHANNELS else []
+    if youtube_channel_ids:
+        youtube_tasks = [fetch_youtube_videos(channel_id, semaphore) for channel_id in youtube_channel_ids]
+        youtube_results = await asyncio.gather(*youtube_tasks, return_exceptions=True)
+        
+        for i, result in enumerate(youtube_results):
+            channel_id = youtube_channel_ids[i]
+            channel_name = YOUTUBE_CHANNELS.get(channel_id, f"Channel_{channel_id}")
+            
+            if isinstance(result, Exception):
+                fail_count += 1
+                print(f"❌ YouTube 频道 {channel_id} 获取异常: {result}")
+                continue
+            
+            if not result:
+                fail_count += 1
+                continue
+            
+            success_count += 1
+            is_special = channel_id in YOUTUBE_NO_FILTER_CHANNELS
+            
+            print(f"\n📺 YouTube频道: {channel_name} (ID: {channel_id})")
+            if is_special:
+                print(f"   ⭐ 特殊频道：跳过关键词过滤")
+            else:
+                print(f"   🔍 关键词过滤：{', '.join(KEYWORDS)}")
+            
+            print(f"   获取到 {len(result)} 个视频")
+            
+            for v in result:
+                video_id = v['video_id']
+                total_videos += 1
+                
+                # 记忆去重（注意：is_processed 检查的是存储的格式 "yt:video_id"）
+                youtube_key = f"yt:{video_id}"
+                if test_memory.is_processed(youtube_key):
+                    skipped_by_history += 1
+                    continue
+                
+                # 检查时间过滤
+                video_time = v['created']
+                time_diff = config['now'] - video_time
+                if time_diff > config['window']:
+                    hours_ago = time_diff / 3600
+                    skipped_by_time += 1
+                    continue
+                
+                # 过滤判断
+                if await filter_content(v, config, up_uid=channel_id, platform='youtube'):
+                    time_str = time.strftime("%m-%d %H:%M", time.localtime(video_time))
+                    print(f"   ✅ 发现新视频 [{time_str}]: {v['title']}")
+                    valid_videos.append(v)
+                    test_memory.add(video_id, platform='youtube')
+                else:
+                    skipped_by_keyword += 1
     
     print(f"\n📊 监控统计：")
-    print(f"   ✅ 成功抓取: {success_count} 个UP主")
-    print(f"   ❌ 失败: {fail_count} 个UP主")
+    print(f"   ✅ 成功抓取: {success_count} 个频道/UP主")
+    print(f"   ❌ 失败: {fail_count} 个频道/UP主")
     print(f"   📹 总视频数: {total_videos} 个")
     print(f"   ⏰ 时间窗口外: {skipped_by_time} 个")
     print(f"   🔍 关键词不匹配: {skipped_by_keyword} 个")
@@ -200,7 +269,18 @@ async def main():
         msg = "<ul>"
         for v in valid_videos:
             time_str = time.strftime("%m-%d %H:%M", time.localtime(v['created']))
-            msg += f"<li style='margin-bottom:8px'>[{time_str}] <b>{v.get('author', 'Unknown')}</b>: <a href='https://www.bilibili.com/video/{v['bvid']}'>{v['title']}</a></li>"
+            platform = v.get('platform', 'bilibili')
+            author = v.get('author', 'Unknown')
+            
+            if platform == 'youtube':
+                video_id = v.get('video_id', '')
+                url = f"https://www.youtube.com/watch?v={video_id}"
+            else:
+                bvid = v.get('bvid', '')
+                url = f"https://www.bilibili.com/video/{bvid}"
+            
+            platform_tag = "📺" if platform == 'youtube' else "📱"
+            msg += f"<li style='margin-bottom:8px'>[{time_str}] {platform_tag} <b>{author}</b>: <a href='{url}'>{v['title']}</a></li>"
         msg += "</ul>"
         
         # 发送通知（测试模式或真实模式）

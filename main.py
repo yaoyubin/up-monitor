@@ -8,7 +8,8 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from bilibili_api import user
-from up_list import TARGET_UIDS, UP_LIST, KEYWORDS, NO_FILTER_UIDS, UP_NAME_MAP
+from googleapiclient.discovery import build
+from up_list import TARGET_UIDS, UP_LIST, KEYWORDS, NO_FILTER_UIDS, UP_NAME_MAP, YOUTUBE_CHANNELS, YOUTUBE_NO_FILTER_CHANNELS
 
 # ================= 配置区域 =================
 
@@ -31,11 +32,24 @@ class HistoryManager:
         except:
             return {}
 
-    def is_processed(self, bvid):
-        return bvid in self.data
+    def is_processed(self, video_id):
+        """
+        检查视频是否已处理
+        支持两种格式：
+        - B站: bvid (如: "BVxxxxx")
+        - YouTube: "yt:video_id" (如: "yt:dQw4w9WgXcQ")
+        """
+        return video_id in self.data
 
-    def add(self, bvid):
-        self.data[bvid] = int(time.time())
+    def add(self, video_id, platform='bilibili'):
+        """
+        添加已处理的视频
+        platform: 'bilibili' 或 'youtube'
+        """
+        if platform == 'youtube':
+            # YouTube 视频ID添加前缀
+            video_id = f"yt:{video_id}"
+        self.data[video_id] = int(time.time())
 
     def save_and_clean(self):
         now = time.time()
@@ -113,8 +127,98 @@ async def fetch_videos_from_up(uid, semaphore, retry_count=3):
         print(f"❌ UID {uid} 获取失败，已重试 {retry_count} 次")
         return []
 
-async def filter_content(video_data, time_config, up_uid=None):
-    """【过滤层】增加了严格的时间判断和特殊UP主支持"""
+async def fetch_youtube_videos(channel_id, semaphore, retry_count=3):
+    """获取YouTube频道视频，带重试机制"""
+    async with semaphore:
+        youtube_api_key = os.environ.get("YOUTUBE_API_KEY")
+        if not youtube_api_key:
+            print(f"⚠️  YOUTUBE_API_KEY 未设置，跳过 YouTube 频道 {channel_id}")
+            return []
+        
+        for attempt in range(retry_count):
+            try:
+                # 使用 asyncio.to_thread 包装同步的 YouTube API 调用
+                def get_videos_sync():
+                    youtube = build('youtube', 'v3', developerKey=youtube_api_key)
+                    
+                    # 第一步：获取 channel 信息和 uploads playlist ID
+                    channel_response = youtube.channels().list(
+                        part='contentDetails,snippet',
+                        id=channel_id
+                    ).execute()
+                    
+                    if not channel_response.get('items'):
+                        return None, None
+                    
+                    channel_info = channel_response['items'][0]
+                    uploads_playlist_id = channel_info['contentDetails']['relatedPlaylists']['uploads']
+                    channel_name = channel_info['snippet']['title']
+                    
+                    # 第二步：获取 uploads playlist 中的最新视频
+                    playlist_response = youtube.playlistItems().list(
+                        part='snippet,contentDetails',
+                        playlistId=uploads_playlist_id,
+                        maxResults=10
+                    ).execute()
+                    
+                    videos = []
+                    for item in playlist_response.get('items', []):
+                        snippet = item['snippet']
+                        video_id = snippet['resourceId']['videoId']
+                        title = snippet['title']
+                        description = snippet.get('description', '')
+                        # YouTube API 返回 ISO 8601 格式时间，转换为时间戳
+                        published_at = snippet['publishedAt']
+                        published_dt = datetime.datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+                        created_timestamp = int(published_dt.timestamp())
+                        
+                        videos.append({
+                            'video_id': video_id,
+                            'title': title,
+                            'description': description,
+                            'created': created_timestamp,
+                            'author': channel_name,
+                            'platform': 'youtube',
+                            'channel_id': channel_id
+                        })
+                    
+                    return videos, channel_name
+                
+                videos, channel_name = await asyncio.to_thread(get_videos_sync)
+                
+                if videos is None:
+                    print(f"❌ YouTube 频道 {channel_id} 不存在或无法访问")
+                    return []
+                
+                if videos:
+                    print(f"✓ YouTube 频道 {channel_id} ({channel_name}): 获取到 {len(videos)} 个视频")
+                
+                await asyncio.sleep(1)  # 延迟，避免触发 API 限制
+                return videos
+                
+            except Exception as e:
+                error_msg = str(e)
+                # 检查是否是配额错误
+                if 'quota' in error_msg.lower() or 'quotaExceeded' in error_msg:
+                    print(f"❌ YouTube API 配额耗尽，无法获取频道 {channel_id} 的视频")
+                    return []
+                
+                wait_time = (attempt + 1) * 2
+                if attempt < retry_count - 1:
+                    print(f"⚠️  YouTube 频道 {channel_id} 获取失败，等待 {wait_time} 秒后重试... (尝试 {attempt + 1}/{retry_count})")
+                    print(f"   错误: {error_msg}")
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    print(f"❌ YouTube 频道 {channel_id} 获取失败: {error_msg}")
+                    return []
+        
+        # 所有重试都失败
+        print(f"❌ YouTube 频道 {channel_id} 获取失败，已重试 {retry_count} 次")
+        return []
+
+async def filter_content(video_data, time_config, up_uid=None, platform='bilibili'):
+    """【过滤层】增加了严格的时间判断和特殊UP主支持，支持B站和YouTube"""
     # 1. 【新增】严格的时间过滤
     # created 是视频发布时间戳
     video_time = video_data['created']
@@ -122,14 +226,16 @@ async def filter_content(video_data, time_config, up_uid=None):
     if (time_config['now'] - video_time) > time_config['window']:
         return False
 
-    # 2. 特殊UP主检查：如果在NO_FILTER_UIDS列表中，跳过关键词过滤
-    if up_uid and up_uid in NO_FILTER_UIDS:
+    # 2. 特殊UP主/频道检查：如果在NO_FILTER列表中，跳过关键词过滤
+    if platform == 'bilibili' and up_uid and up_uid in NO_FILTER_UIDS:
+        return True
+    elif platform == 'youtube' and up_uid and up_uid in YOUTUBE_NO_FILTER_CHANNELS:
         return True
 
-    # 3. 关键词硬过滤（仅对普通UP主）
+    # 3. 关键词硬过滤（仅对普通UP主/频道）
     title = video_data['title']
     # 修复简介可能为空的bug
-    desc = video_data['description'] if 'description' in video_data else ""
+    desc = video_data.get('description', '')
     full_text = (title + desc).lower()
     
     hit_keyword = False
@@ -208,19 +314,22 @@ async def main():
     # 1. 获取今日策略 (周报 vs 日报)
     config = get_time_config()
     
-    print(f"开始监控 {len(TARGET_UIDS)} 个UP主...")
+    print(f"开始监控 {len(TARGET_UIDS)} 个B站UP主...")
+    if YOUTUBE_CHANNELS:
+        print(f"开始监控 {len(YOUTUBE_CHANNELS)} 个YouTube频道...")
     print(f"并发限制: {CONCURRENCY_LIMIT}")
     print("")
-    
-    semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
-    tasks = [fetch_videos_from_up(uid, semaphore) for uid in TARGET_UIDS]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
     
     valid_videos = []
     success_count = 0
     fail_count = 0
     
-    for i, result in enumerate(results):
+    # 2. 获取B站视频
+    semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+    bilibili_tasks = [fetch_videos_from_up(uid, semaphore) for uid in TARGET_UIDS]
+    bilibili_results = await asyncio.gather(*bilibili_tasks, return_exceptions=True)
+    
+    for i, result in enumerate(bilibili_results):
         if isinstance(result, Exception):
             fail_count += 1
             print(f"❌ UID {TARGET_UIDS[i]} 获取异常: {result}")
@@ -240,10 +349,42 @@ async def main():
                 continue
             
             # 传入 config 和 UID 进行过滤判断
-            if await filter_content(v, config, up_uid=current_uid):
-                print(f"发现新视频：{v['title']}")
+            if await filter_content(v, config, up_uid=current_uid, platform='bilibili'):
+                print(f"发现新视频（B站）：{v['title']}")
                 valid_videos.append(v)
-                memory.add(bvid)
+                memory.add(bvid, platform='bilibili')
+    
+    # 3. 获取YouTube视频
+    youtube_channel_ids = list(YOUTUBE_CHANNELS.keys())
+    if youtube_channel_ids:
+        youtube_tasks = [fetch_youtube_videos(channel_id, semaphore) for channel_id in youtube_channel_ids]
+        youtube_results = await asyncio.gather(*youtube_tasks, return_exceptions=True)
+        
+        for i, result in enumerate(youtube_results):
+            channel_id = youtube_channel_ids[i]
+            
+            if isinstance(result, Exception):
+                fail_count += 1
+                print(f"❌ YouTube 频道 {channel_id} 获取异常: {result}")
+                continue
+            
+            if not result:
+                fail_count += 1
+                continue
+            
+            success_count += 1
+            for v in result:
+                video_id = v['video_id']
+                
+                # 记忆去重（使用 "yt:video_id" 格式）
+                if memory.is_processed(video_id):
+                    continue
+                
+                # 传入 config 和 Channel ID 进行过滤判断
+                if await filter_content(v, config, up_uid=channel_id, platform='youtube'):
+                    print(f"发现新视频（YouTube）：{v['title']}")
+                    valid_videos.append(v)
+                    memory.add(video_id, platform='youtube')
     
     print(f"\n监控完成：成功 {success_count} 个，失败 {fail_count} 个")
 
@@ -255,7 +396,18 @@ async def main():
         for v in valid_videos:
             # 格式化一下时间，比如 [01-05]
             time_str = time.strftime("%m-%d", time.localtime(v['created']))
-            msg += f"<li style='margin-bottom:8px'>[{time_str}] <b>{v['author']}</b>: <a href='https://www.bilibili.com/video/{v['bvid']}'>{v['title']}</a></li>"
+            platform = v.get('platform', 'bilibili')
+            
+            if platform == 'youtube':
+                video_id = v['video_id']
+                video_url = f"https://www.youtube.com/watch?v={video_id}"
+                platform_tag = "[YouTube]"
+            else:
+                video_id = v['bvid']
+                video_url = f"https://www.bilibili.com/video/{video_id}"
+                platform_tag = "[B站]"
+            
+            msg += f"<li style='margin-bottom:8px'>[{time_str}] {platform_tag} <b>{v['author']}</b>: <a href='{video_url}'>{v['title']}</a></li>"
         msg += "</ul>"
         
         success = await send_notification(msg, config['title'])
