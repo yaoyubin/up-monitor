@@ -87,14 +87,14 @@ async def main():
     if choice == "2":
         print("\n✅ 使用【周报模式】测试...")
         config = {
-            "title": "B站 AIGC 周报 (Past 7 Days) [测试]",
+            "title": "UGC监控周报 (Past 7 Days) [测试]",
             "window": 7 * 24 * 3600,  # 7天
             "now": current_timestamp
         }
     else:
         print("\n✅ 使用【日报模式】测试...")
         config = {
-            "title": "B站 AIGC 日报 [测试]",
+            "title": "UGC监控日报 [测试]",
             "window": 26 * 3600,  # 26小时
             "now": current_timestamp
         }

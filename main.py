@@ -73,14 +73,14 @@ def get_time_config():
     if weekday == 0: # 如果是周一
         print("今天是周一，执行【周报】模式，抓取过去 7 天...")
         return {
-            "title": "B站 AIGC 周报 (Past 7 Days)",
+            "title": "UGC监控周报 (Past 7 Days)",
             "window": 7 * 24 * 3600,
             "now": current_timestamp
         }
     else: # 周二到周五
         print("今天是工作日，执行【日报】模式，抓取过去 1 天...")
         return {
-            "title": "B站 AIGC 日报",
+            "title": "UGC监控日报",
             "window": 26 * 3600, # 设置26小时，稍微多一点防止漏掉边界
             "now": current_timestamp
         }
