@@ -28,23 +28,10 @@ NO_FILTER_UIDS = [
     21151219,  # 8KRAW
 ] 
 
-# UP主名字映射（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
-# 用于显示UP主名字，即使UP主不在UP_LIST中
-# 此映射会自动从UP_LIST和查询结果中生成
-UP_NAME_MAP = {
-    **UP_LIST,  # 从UP_LIST中获取名字
-}
-
-# 提取所有UID列表（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
-# 使用set去重，确保不重复监控
-TARGET_UIDS = list(set(list(UP_LIST.keys()) + NO_FILTER_UIDS))
-
 # YouTube频道列表：{Channel ID: 频道名字}
 # Channel ID 格式：UCxxxxx（24个字符）
 YOUTUBE_CHANNELS = {
-    # 示例：'UCxxxxx': "频道名字",
-    # 你可以在这里添加需要监控的YouTube频道
-    'UCVomjkM_t0EcctTWSE1Jvxg': "VomjkM",
+    "UCVomjkM_t0EcctTWSE1Jvxg": "贝拉聊财金",
 }
 
 # YouTube特殊频道列表（这些频道的视频不进行关键词过滤，直接推送）
@@ -52,7 +39,7 @@ YOUTUBE_CHANNELS = {
 YOUTUBE_NO_FILTER_CHANNELS = [
     # 示例：'UCxxxxx',  # 频道名字
     # 你可以在这里添加不需要关键词过滤的YouTube频道ID
-    'UCVomjkM_t0EcctTWSE1Jvxg', # VomjkM
+    "UCVomjkM_t0EcctTWSE1Jvxg",  # 贝拉聊财金
 ]
 
 # UP主名字映射（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
