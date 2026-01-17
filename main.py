@@ -8,7 +8,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from bilibili_api import user
-from up_list import TARGET_UIDS, UP_LIST, KEYWORDS, NO_FILTER_UIDS
+from up_list import TARGET_UIDS, UP_LIST, KEYWORDS, NO_FILTER_UIDS, UP_NAME_MAP
 
 # ================= 配置区域 =================
 

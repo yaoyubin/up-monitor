@@ -92,12 +92,33 @@ set GMAIL_RECIPIENT=recipient@example.com
 python main.py
 ```
 
+#### 方式三：本地测试（推荐用于开发调试）
+
+使用测试脚本可以预览日报/周报内容，不会发送真实邮件：
+
+```bash
+# 运行测试脚本
+python test_local.py
+```
+
+测试脚本功能：
+- ✅ 可以选择日报模式（26小时）或周报模式（7天）
+- ✅ 不发送真实邮件，只在控制台显示邮件预览
+- ✅ 使用临时文件 `history_test.json`，不会影响真实的 `history.json`
+- ✅ 完整展示抓取的视频列表和报告格式
+
+**注意事项**：
+- 测试脚本会真实抓取UP主的视频数据
+- 如果需要测试邮件发送，可以修改 `test_local.py` 中的 `SEND_REAL_EMAIL = True`
+
 ## 项目结构
 
 ```
 .
 ├── main.py                    # 主程序
+├── test_local.py              # 本地测试脚本
 ├── history.json               # 已处理视频记录（自动生成）
+├── up_list.py                 # UP主列表配置
 ├── requirements.txt           # Python依赖
 ├── .github/
 │   └── workflows/
