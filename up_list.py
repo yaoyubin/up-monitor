@@ -41,6 +41,7 @@ YOUTUBE_CHANNELS = {
     "UC_5lJHgnMP_lb_VpIiXV0hQ": "课代表立正",
     "UC_whOg3XES3Fihic53fvo4Q": "Terry Chen 泰瑞",
     "UCh4QrR5V6reIojGpRqkTbYw": "一口新飯",
+    "UC4dtpugIYK56S_7btf5a-iQ": "Lin Yi",
 }
 
 # YouTube特殊频道列表（这些频道的视频不进行关键词过滤，直接推送）
@@ -54,6 +55,7 @@ YOUTUBE_NO_FILTER_CHANNELS = [
     "UCAxQ8sjHgjXh26la7jEBw3w",  # Mike是麥克
     "UC49-CTsZ9w4FAlOilfNnd2A",  # Emma Zheng
     "UC_whOg3XES3Fihic53fvo4Q",  # Terry Chen 泰瑞
+    "UC4dtpugIYK56S_7btf5a-iQ",  # Lin Yi
 ]
 
 # UP主名字映射（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
