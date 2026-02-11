@@ -120,7 +120,7 @@ If needed, you can further use the `web_scraper.py` file to scrape the web page 
   - 通过 Gmail 邮件发送推送通知（合并B站和YouTube的更新到同一封邮件）
   - 支持日报/周报模式：周六执行周报模式（抓取过去7天），其他6天执行日报模式（抓取过去26小时）
 - GitHub Actions 集成：
-  - 每天自动运行（美国西部时间下午5点，UTC 01:00）
+  - 每天自动运行（北京时间 8:00，UTC 00:00）
   - 自动提交更新后的 history.json 到仓库，实现持久化存储
 
 ### 架构设计
