@@ -229,6 +229,7 @@ python test_local.py
 - [ ] 利用gemini总结youtube视频
 - [ ] 接入LLM API实现语义判断
 - [ ] 添加视频分类功能
+- [ ] 添加RSS monitor关注的blogger，比如 https://kangyuan.me/rss.xml
 
 ## License
 
