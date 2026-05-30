@@ -45,6 +45,7 @@ YOUTUBE_CHANNELS = {
     "UCh4QrR5V6reIojGpRqkTbYw": "一口新飯",
     "UCgLUl1WDoDXUtxPaZeSZHsw": "李自然",
     "UC4dtpugIYK56S_7btf5a-iQ": "Lin Yi",
+    "UCKV2yWPB3wn0RTZh3cTD8YA": "硅谷101",
 }
 
 # YouTube特殊频道列表（这些频道的视频不进行关键词过滤，直接推送）
@@ -60,6 +61,7 @@ YOUTUBE_NO_FILTER_CHANNELS = [
     "UC_whOg3XES3Fihic53fvo4Q",  # Terry Chen 泰瑞
     "UCgLUl1WDoDXUtxPaZeSZHsw",  # 李自然
     "UC4dtpugIYK56S_7btf5a-iQ",  # Lin Yi
+    "UCKV2yWPB3wn0RTZh3cTD8YA",  # 硅谷101
 ]
 
 # UP主名字映射（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
