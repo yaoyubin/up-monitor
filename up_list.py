@@ -46,6 +46,7 @@ YOUTUBE_CHANNELS = {
     "UCgLUl1WDoDXUtxPaZeSZHsw": "李自然",
     "UC4dtpugIYK56S_7btf5a-iQ": "Lin Yi",
     "UCKV2yWPB3wn0RTZh3cTD8YA": "硅谷101",
+    "UCneG8p_dRmZZ_xFFCv7jfJw": "海伦子Hellen",
 }
 
 # YouTube特殊频道列表（这些频道的视频不进行关键词过滤，直接推送）
@@ -62,6 +63,7 @@ YOUTUBE_NO_FILTER_CHANNELS = [
     "UCgLUl1WDoDXUtxPaZeSZHsw",  # 李自然
     "UC4dtpugIYK56S_7btf5a-iQ",  # Lin Yi
     "UCKV2yWPB3wn0RTZh3cTD8YA",  # 硅谷101
+    "UCneG8p_dRmZZ_xFFCv7jfJw",  # 海伦子Hellen
 ]
 
 # UP主名字映射（自动包含UP_LIST和NO_FILTER_UIDS中的所有UP主）
